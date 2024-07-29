@@ -28,12 +28,15 @@ jobs:
       - name: Validate Gradle Wrapper
         uses: gradle/actions/wrapper-validation@d156388eb19639ec20ade50009f3d199ce1e2808 # v4.1.0
 
+      - name: Set up JDK
+        uses: actions/setup-java@b36c23c0d998641eff861008f374ee103c25ac73 # v4.4.0
+        with:
+          java-version: 17
+          distribution: temurin
+
       - name: Get number of modules
         run: |
-          set -x
-          projects=(src/*/*)
-
-          echo "NUM_INDIVIDUAL_MODULES=${#projects[@]}" >> $GITHUB_ENV
+          cat >> $GITHUB_ENV <<< "NUM_INDIVIDUAL_MODULES=$(./gradlew -q projects | grep ':src:.*:.*' | wc -l)"
 
       - id: generate-matrices
         name: Create output matrices
@@ -47,11 +50,12 @@ jobs:
 
             console.log(`Individual modules: ${numIndividualModules} (${numIndividualChunks} chunks of ${chunkSize})`);
 
-            core.setOutput('individualMatrix', { 'chunk': [...Array(numIndividualChunks).keys()] });
+            if (numIndividualChunks > 0) core.setOutput('individualMatrix', { 'chunk': [...Array(numIndividualChunks).keys()] });
 
   build_individual:
     name: Build individual modules
     needs: prepare
+    if: ${{ needs.prepare.outputs.multisrcMatrix }}
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJSON(needs.prepare.outputs.individualMatrix) }}
