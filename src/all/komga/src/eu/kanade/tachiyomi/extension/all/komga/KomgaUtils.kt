@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.extension.all.komga
 
+import android.content.Context
 import android.text.Editable
 import android.text.TextWatcher
 import android.widget.Button
@@ -15,6 +16,9 @@ val formatterDate = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     .apply { timeZone = TimeZone.getTimeZone("UTC") }
 val formatterDateTime = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
     .apply { timeZone = TimeZone.getTimeZone("UTC") }
+
+fun makeRestartRequiredToast(context: Context) =
+    Toast.makeText(context, "Restart Tachiyomi to apply new setting.", Toast.LENGTH_LONG)
 
 fun parseDate(date: String): Long = try {
     formatterDate.parse(date)!!.time
@@ -81,7 +85,7 @@ fun PreferenceScreen.addEditTextPreference(
                 val result = text.isBlank() || validate?.invoke(text) ?: true
 
                 if (restartRequired && result) {
-                    Toast.makeText(context, "Restart Tachiyomi to apply new setting.", Toast.LENGTH_LONG).show()
+                    makeRestartRequiredToast(context).show()
                 }
 
                 result

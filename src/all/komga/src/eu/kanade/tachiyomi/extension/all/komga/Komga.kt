@@ -4,8 +4,8 @@ import android.app.Application
 import android.content.SharedPreferences
 import android.text.InputType
 import android.util.Log
-import android.widget.Toast
 import androidx.preference.CheckBoxPreference
+import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.MultiSelectListPreference
 import androidx.preference.PreferenceScreen
@@ -38,7 +38,6 @@ import okhttp3.Credentials
 import okhttp3.Dns
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import org.apache.commons.text.StringSubstitutor
@@ -47,6 +46,7 @@ import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import java.security.MessageDigest
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 open class Komga(private val suffix: String = "") : ConfigurableSource, UnmeteredSource, HttpSource() {
 
@@ -86,12 +86,16 @@ open class Komga(private val suffix: String = "") : ConfigurableSource, Unmetere
 
     private val literalQuery by lazy { preferences.getBoolean(PREF_QUERY_LITERAL, PREF_QUERY_LITERAL_DEFAULT) }
 
+    private val readTimeout by lazy { preferences.getString(PREF_READ_TIMEOUT, null)?.toLongOrNull() ?: PREF_READ_TIMEOUT_DEFAULT }
+
+    private val connectionTimeout by lazy { preferences.getString(PREF_CONN_TIMEOUT, null)?.toLongOrNull() ?: PREF_CONN_TIMEOUT_DEFAULT }
+
     private val json: Json by injectLazy()
 
     override fun headersBuilder() = super.headersBuilder()
         .set("User-Agent", "TachiyomiKomga/${AppInfo.getVersionName()}")
 
-    override val client: OkHttpClient =
+    override val client by lazy {
         network.client.newBuilder()
             .authenticator { _, response ->
                 if (response.request.header("Authorization") != null) {
@@ -102,8 +106,11 @@ open class Komga(private val suffix: String = "") : ConfigurableSource, Unmetere
                         .build()
                 }
             }
+            .readTimeout(readTimeout, TimeUnit.MILLISECONDS)
+            .connectTimeout(connectionTimeout, TimeUnit.MILLISECONDS)
             .dns(Dns.SYSTEM) // don't use DNS over HTTPS as it breaks IP addressing
             .build()
+    }
 
     override fun popularMangaRequest(page: Int): Request =
         searchMangaRequest(
@@ -331,7 +338,7 @@ open class Komga(private val suffix: String = "") : ConfigurableSource, Unmetere
 
                 setDefaultValue(PREF_EXTRA_SOURCES_DEFAULT)
                 setOnPreferenceChangeListener { _, _ ->
-                    Toast.makeText(screen.context, "Restart Tachiyomi to apply new setting.", Toast.LENGTH_LONG).show()
+                    makeRestartRequiredToast(screen.context).show()
                     true
                 }
             }.also(screen::addPreference)
@@ -434,6 +441,36 @@ open class Komga(private val suffix: String = "") : ConfigurableSource, Unmetere
             summary = "to prevent treating colon as namespace separator"
             setDefaultValue(PREF_QUERY_LITERAL_DEFAULT)
         }.also(screen::addPreference)
+
+        EditTextPreference(screen.context).apply {
+            key = PREF_READ_TIMEOUT
+            title = PREF_READ_TIMEOUT
+            summary = readTimeout.toString()
+            setDefaultValue(null)
+            setOnBindEditTextListener { editText ->
+                editText.inputType = InputType.TYPE_CLASS_NUMBER
+            }
+            setOnPreferenceChangeListener { preference, newValue ->
+                makeRestartRequiredToast(screen.context).show()
+                preference.summary = newValue as String
+                true
+            }
+        }.also(screen::addPreference)
+
+        EditTextPreference(screen.context).apply {
+            key = PREF_CONN_TIMEOUT
+            title = PREF_CONN_TIMEOUT
+            summary = connectionTimeout.toString()
+            setDefaultValue(null)
+            setOnBindEditTextListener { editText ->
+                editText.inputType = InputType.TYPE_CLASS_NUMBER
+            }
+            setOnPreferenceChangeListener { preference, newValue ->
+                makeRestartRequiredToast(screen.context).show()
+                preference.summary = newValue.toString()
+                true
+            }
+        }.also(screen::addPreference)
     }
 
     private var libraries = emptyList<LibraryDto>()
@@ -491,6 +528,10 @@ open class Komga(private val suffix: String = "") : ConfigurableSource, Unmetere
         internal const val PREF_EXTRA_SOURCES_DEFAULT = "2"
         internal const val PREF_QUERY_LITERAL = "Literal queries"
         internal const val PREF_QUERY_LITERAL_DEFAULT = false
+        internal const val PREF_READ_TIMEOUT = "Read timeout"
+        internal const val PREF_READ_TIMEOUT_DEFAULT = 10000L
+        internal const val PREF_CONN_TIMEOUT = "Connection timeout"
+        internal const val PREF_CONN_TIMEOUT_DEFAULT = 10000L
 
         internal const val TYPE_SERIES = "Series"
         internal const val TYPE_READLISTS = "Read lists"
