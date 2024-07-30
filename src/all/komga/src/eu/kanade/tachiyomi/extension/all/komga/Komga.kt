@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.text.InputType
 import android.util.Log
 import android.widget.Toast
+import androidx.preference.CheckBoxPreference
 import androidx.preference.ListPreference
 import androidx.preference.MultiSelectListPreference
 import androidx.preference.PreferenceScreen
@@ -83,6 +84,8 @@ open class Komga(private val suffix: String = "") : ConfigurableSource, Unmetere
     private val defaultLibraries
         get() = preferences.getStringSet(PREF_DEFAULT_LIBRARIES, emptySet())!!
 
+    private val literalQuery by lazy { preferences.getBoolean(PREF_QUERY_LITERAL, PREF_QUERY_LITERAL_DEFAULT) }
+
     private val json: Json by injectLazy()
 
     override fun headersBuilder() = super.headersBuilder()
@@ -137,7 +140,9 @@ open class Komga(private val suffix: String = "") : ConfigurableSource, Unmetere
             else -> "series"
         }
 
-        val url = "$baseUrl/api/v1/$type?search=$query&page=${page - 1}&deleted=false".toHttpUrl().newBuilder()
+        val searchQuery = if (literalQuery) "\"$query\"" else query
+
+        val url = "$baseUrl/api/v1/$type?search=$searchQuery&page=${page - 1}&deleted=false".toHttpUrl().newBuilder()
         val filterList = filters.ifEmpty { getFilterList() }
         val defaultLibraries = defaultLibraries
 
@@ -422,6 +427,13 @@ open class Komga(private val suffix: String = "") : ConfigurableSource, Unmetere
             },
             validationMessage = "Invalid chapter title format",
         )
+
+        CheckBoxPreference(screen.context).apply {
+            key = PREF_QUERY_LITERAL
+            title = "Surround queries with double quotes"
+            summary = "to prevent treating colon as namespace separator"
+            setDefaultValue(PREF_QUERY_LITERAL_DEFAULT)
+        }.also(screen::addPreference)
     }
 
     private var libraries = emptyList<LibraryDto>()
@@ -477,6 +489,8 @@ open class Komga(private val suffix: String = "") : ConfigurableSource, Unmetere
     companion object {
         internal const val PREF_EXTRA_SOURCES_COUNT = "Number of extra sources"
         internal const val PREF_EXTRA_SOURCES_DEFAULT = "2"
+        internal const val PREF_QUERY_LITERAL = "Literal queries"
+        internal const val PREF_QUERY_LITERAL_DEFAULT = false
 
         internal const val TYPE_SERIES = "Series"
         internal const val TYPE_READLISTS = "Read lists"
